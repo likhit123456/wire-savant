@@ -1,0 +1,1753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WireSavant — Signal Analysis Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   WIRESAVANT — "signal console" design system
+   A scanning instrument for reading the threat signature of a URL or document.
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+
+:root{
+  --bg:#090c0e;
+  --bg-grid: rgba(77,216,199,0.035);
+  --surface:#0e1316;
+  --surface-2:#141b1f;
+  --surface-3:#1a2227;
+  --border:#1f2a2e;
+  --border-bright:#2c3a3f;
+  --text:#e7eef0;
+  --text-dim:#9fb0b6;
+  --text-mute:#5c6e74;
+
+  --cyan:#4dd8c7;
+  --cyan-dim:rgba(77,216,199,0.14);
+  --cyan-line:rgba(77,216,199,0.35);
+
+  --safe:#5be08a;
+  --safe-bg:rgba(91,224,138,0.08);
+  --warn:#f0ad4e;
+  --warn-bg:rgba(240,173,78,0.08);
+  --danger:#ff6b6b;
+  --danger-bg:rgba(255,107,107,0.09);
+
+  --mono: 'IBM Plex Mono', monospace;
+  --display: 'Space Mono', monospace;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; }
+}
+
+html,body{ height:100%; }
+body{
+  background:
+    radial-gradient(ellipse 900px 500px at 50% -10%, rgba(77,216,199,0.06), transparent 60%),
+    repeating-linear-gradient(0deg, var(--bg-grid) 0px, var(--bg-grid) 1px, transparent 1px, transparent 36px),
+    repeating-linear-gradient(90deg, var(--bg-grid) 0px, var(--bg-grid) 1px, transparent 1px, transparent 36px),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:48px 18px 40px;
+}
+
+::selection{ background:var(--cyan-dim); color:var(--cyan); }
+
+/* scanline texture overlay, subtle, fixed */
+body::after{
+  content:'';
+  position:fixed; inset:0; pointer-events:none; z-index:0;
+  background:repeating-linear-gradient(180deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+  mix-blend-mode:overlay;
+}
+
+.wrap{ width:100%; max-width:720px; position:relative; z-index:1; }
+
+/* ---------------- HEADER ---------------- */
+header{ text-align:center; margin-bottom:34px; }
+
+.brand{
+  display:inline-flex; align-items:center; gap:12px;
+  margin-bottom:14px;
+}
+.brand-mark{
+  width:38px; height:38px;
+  border:1.5px solid var(--cyan-line);
+  border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  position:relative;
+  background:radial-gradient(circle, var(--cyan-dim) 0%, transparent 70%);
+}
+.brand-mark::before{
+  content:''; position:absolute; inset:7px;
+  border:1px solid var(--cyan-line); border-radius:50%;
+}
+.brand-mark::after{
+  content:''; width:4px; height:4px; border-radius:50%;
+  background:var(--cyan); box-shadow:0 0 8px var(--cyan);
+}
+h1{
+  font-family:var(--display);
+  font-size:21px; font-weight:700; letter-spacing:0.02em;
+}
+h1 .dim{ color:var(--text-mute); font-weight:400; }
+
+.tagline{
+  font-family:var(--mono);
+  font-size:12.5px; color:var(--text-dim);
+  letter-spacing:0.01em;
+  margin-bottom:14px;
+}
+.tagline .blip{ color:var(--cyan); }
+
+.counter-strip{
+  display:inline-flex; align-items:center; gap:14px;
+  font-family:var(--mono); font-size:11px; color:var(--text-mute);
+  border:1px solid var(--border); border-radius:3px;
+  padding:5px 12px; letter-spacing:0.04em;
+}
+.counter-strip .led{
+  width:6px; height:6px; border-radius:50%;
+  background:var(--safe); box-shadow:0 0 6px var(--safe);
+  animation:pulse-led 2.4s ease-in-out infinite;
+}
+.counter-strip .seg{ display:inline-flex; align-items:center; gap:5px; }
+.counter-strip .seg .lab{ color:var(--text-mute); }
+.counter-strip .seg b{ color:var(--cyan); font-weight:600; }
+.counter-strip .sep{ width:1px; height:11px; background:var(--border); }
+@keyframes pulse-led{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+
+/* keyboard hint */
+.kbd-hint{
+  margin-top:10px;
+  font-family:var(--mono); font-size:10.5px; color:var(--text-mute);
+  letter-spacing:0.04em;
+}
+.kbd-hint kbd{
+  font-family:var(--mono); font-size:10px;
+  padding:1px 6px; border:1px solid var(--border-bright);
+  border-radius:3px; color:var(--text-dim); background:var(--surface-2);
+}
+
+/* ---------------- CONSOLE PANEL ---------------- */
+.panel{
+  width:100%;
+  background:linear-gradient(180deg, var(--surface) 0%, var(--surface) 100%);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:6px;
+  box-shadow:0 30px 60px -30px rgba(0,0,0,0.6);
+}
+.panel-inner{
+  border:1px solid var(--border);
+  border-radius:7px;
+  padding:26px 26px 22px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.012), transparent 80px),
+    var(--surface);
+}
+
+/* tab toggles styled like instrument buttons */
+.mode-row{
+  display:flex; gap:8px; margin-bottom:18px;
+}
+.mode-btn{
+  flex:1;
+  font-family:var(--mono); font-size:11.5px; letter-spacing:0.06em; text-transform:uppercase;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  color:var(--text-mute);
+  padding:9px 0; border-radius:5px; cursor:pointer;
+  transition:all 0.15s;
+}
+.mode-btn.active{
+  color:var(--cyan); border-color:var(--cyan-line); background:var(--cyan-dim);
+}
+.mode-btn:hover:not(.active){ color:var(--text-dim); border-color:var(--border-bright); }
+
+#singlePane, #batchPane, #docPane, #comparePane{ display:none; }
+#singlePane.active, #batchPane.active, #docPane.active, #comparePane.active{ display:block; }
+
+/* scan input - terminal prompt styling */
+.scan-row{ display:flex; gap:10px; }
+.prompt-field{
+  flex:1; position:relative;
+  display:flex; align-items:center;
+  background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:0 4px 0 14px;
+  transition:border-color 0.15s, box-shadow 0.15s;
+}
+.prompt-field:focus-within{ border-color:var(--cyan-line); box-shadow:0 0 0 3px var(--cyan-dim); }
+.prompt-field .caret{ color:var(--cyan); font-family:var(--mono); font-size:13px; margin-right:8px; }
+.prompt-field input{
+  flex:1; background:none; border:none; outline:none;
+  color:var(--text); font-family:var(--mono); font-size:13.5px;
+  padding:12px 8px 12px 0;
+}
+.prompt-field input::placeholder{ color:var(--text-mute); }
+
+button.scan-btn{
+  background:var(--cyan); color:#06201b; border:none;
+  border-radius:6px; padding:0 22px;
+  font-family:var(--mono); font-size:12.5px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase;
+  cursor:pointer; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:8px;
+  transition:background 0.15s, transform 0.05s;
+}
+button.scan-btn:hover:not(:disabled){ background:#69e6d8; }
+button.scan-btn:active:not(:disabled){ transform:scale(0.98); }
+button.scan-btn:disabled{ opacity:0.45; cursor:not-allowed; }
+
+button.scan-btn.secondary{
+  background:var(--surface-2); color:var(--text-dim); border:1px solid var(--border);
+}
+button.scan-btn.secondary:hover:not(:disabled){ background:var(--surface-3); color:var(--cyan); border-color:var(--cyan-line); }
+
+.spinner-dot{
+  width:12px; height:12px; border-radius:50%;
+  border:2px solid rgba(6,32,27,0.3); border-top-color:#06201b;
+  animation:spin 0.7s linear infinite; display:none;
+}
+.spinner-dot.light{ border-color:rgba(159,176,182,0.3); border-top-color:var(--cyan); }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
+textarea{
+  width:100%; resize:vertical; min-height:104px;
+  background:var(--bg); border:1px solid var(--border); border-radius:6px;
+  color:var(--text); font-family:var(--mono); font-size:12.5px; line-height:1.7;
+  padding:12px 14px; outline:none; margin-bottom:12px;
+  transition:border-color 0.15s;
+}
+textarea:focus{ border-color:var(--cyan-line); }
+textarea::placeholder{ color:var(--text-mute); }
+
+/* example targets */
+.examples-label{
+  font-family:var(--mono); font-size:10px; font-weight:500; letter-spacing:0.12em; text-transform:uppercase;
+  color:var(--text-mute); margin:18px 0 9px;
+}
+.target-chips{ display:flex; flex-wrap:wrap; gap:7px; }
+.chip{
+  font-family:var(--mono); font-size:11.5px;
+  padding:5px 11px; border:1px solid var(--border); border-radius:4px;
+  color:var(--text-dim); background:none; cursor:pointer;
+  transition:all 0.15s;
+}
+.chip:hover{ border-color:var(--cyan-line); color:var(--cyan); background:var(--cyan-dim); }
+
+/* ---------------- DROP ZONE (Document tab) ---------------- */
+.drop-zone{
+  border:1.5px dashed var(--border-bright);
+  border-radius:8px;
+  padding:34px 22px;
+  text-align:center;
+  background:
+    radial-gradient(circle at center, var(--cyan-dim) 0%, transparent 60%),
+    var(--bg);
+  transition:all 0.15s;
+  cursor:pointer;
+}
+.drop-zone:hover, .drop-zone.dragover{
+  border-color:var(--cyan);
+  background:
+    radial-gradient(circle at center, rgba(77,216,199,0.18) 0%, transparent 70%),
+    var(--bg);
+}
+.drop-zone .icon{
+  width:42px; height:42px; margin:0 auto 12px;
+  border:1.5px solid var(--cyan-line); border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--cyan);
+}
+.drop-zone .icon svg{ width:20px; height:20px; }
+.drop-zone .title{
+  font-family:var(--mono); font-size:13px; color:var(--text);
+  margin-bottom:5px;
+}
+.drop-zone .title b{ color:var(--cyan); font-weight:600; }
+.drop-zone .sub{
+  font-family:var(--mono); font-size:11px; color:var(--text-mute);
+  letter-spacing:0.04em;
+}
+.drop-zone .sub kbd{
+  font-family:var(--mono); font-size:10px;
+  padding:1px 5px; border:1px solid var(--border-bright);
+  border-radius:3px; color:var(--text-dim); background:var(--surface-2);
+}
+#fileInput{ display:none; }
+
+.doc-types{
+  display:flex; justify-content:center; gap:10px;
+  margin-top:16px; flex-wrap:wrap;
+}
+.doc-type{
+  font-family:var(--mono); font-size:10.5px;
+  padding:4px 10px; border:1px solid var(--border); border-radius:20px;
+  color:var(--text-mute); letter-spacing:0.04em;
+}
+.doc-type b{ color:var(--text-dim); font-weight:500; }
+
+/* ---------------- SCAN / RADAR (signature element) ---------------- */
+#scanStage, #scanStageDoc{
+  display:none;
+  margin-top:24px; padding-top:24px; border-top:1px solid var(--border);
+  text-align:center;
+}
+.radar{
+  width:128px; height:128px; margin:0 auto 18px;
+  position:relative;
+  border-radius:50%;
+  border:1px solid var(--border-bright);
+  background:radial-gradient(circle, rgba(77,216,199,0.05) 0%, transparent 75%);
+}
+.radar::before, .radar::after{
+  content:''; position:absolute; border-radius:50%; border:1px solid var(--border);
+}
+.radar::before{ inset:18px; }
+.radar::after{ inset:36px; }
+.radar-cross{ position:absolute; inset:0; }
+.radar-cross::before, .radar-cross::after{
+  content:''; position:absolute; background:var(--border);
+}
+.radar-cross::before{ left:50%; top:6px; bottom:6px; width:1px; transform:translateX(-50%); }
+.radar-cross::after{ top:50%; left:6px; right:6px; height:1px; transform:translateY(-50%); }
+.radar-sweep{
+  position:absolute; inset:0; border-radius:50%;
+  background:conic-gradient(from 0deg, var(--cyan) 0deg, transparent 55deg, transparent 360deg);
+  opacity:0.55;
+  animation:sweep 2.1s linear infinite;
+}
+@keyframes sweep{ to{ transform:rotate(360deg); } }
+.radar-core{
+  position:absolute; left:50%; top:50%; width:7px; height:7px;
+  background:var(--cyan); border-radius:50%; box-shadow:0 0 12px var(--cyan);
+  transform:translate(-50%,-50%);
+}
+.radar-blip{
+  position:absolute; width:5px; height:5px; border-radius:50%;
+  background:var(--text); opacity:0;
+  transform:translate(-50%,-50%);
+  animation:blip-fade 2.1s ease-out infinite;
+}
+@keyframes blip-fade{
+  0%{ opacity:0; } 8%{ opacity:0.9; } 30%{ opacity:0; } 100%{ opacity:0; }
+}
+
+.scan-readout{ font-family:var(--mono); font-size:12px; color:var(--text-dim); min-height:18px; word-break:break-all; padding:0 10px; }
+.scan-readout .target-url{ color:var(--cyan); }
+.scan-steps{
+  display:flex; justify-content:center; gap:18px; margin-top:14px;
+  font-family:var(--mono); font-size:10.5px; letter-spacing:0.04em; text-transform:uppercase;
+}
+.scan-steps .s{ color:var(--text-mute); transition:color 0.3s; position:relative; padding-left:14px; }
+.scan-steps .s::before{
+  content:''; position:absolute; left:0; top:50%; transform:translateY(-50%);
+  width:6px; height:6px; border-radius:50%; border:1px solid var(--text-mute);
+}
+.scan-steps .s.active{ color:var(--cyan); }
+.scan-steps .s.active::before{ background:var(--cyan); border-color:var(--cyan); box-shadow:0 0 6px var(--cyan); }
+.scan-steps .s.done{ color:var(--safe); }
+.scan-steps .s.done::before{ background:var(--safe); border-color:var(--safe); }
+
+/* ---------------- RESULT READOUT ---------------- */
+#result, #batchResult, #docResult{ display:none; margin-top:22px; padding-top:22px; border-top:1px solid var(--border); }
+
+.result-top{
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  margin-bottom:16px;
+}
+.tag-group{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+.verdict{
+  display:inline-flex; align-items:center; gap:7px;
+  font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:0.1em; text-transform:uppercase;
+  padding:5px 11px; border-radius:4px;
+}
+.verdict .dot{ width:6px; height:6px; border-radius:50%; background:currentColor; box-shadow:0 0 6px currentColor; }
+.verdict-safe{ background:var(--safe-bg); color:var(--safe); border:1px solid rgba(91,224,138,0.25); }
+.verdict-danger{ background:var(--danger-bg); color:var(--danger); border:1px solid rgba(255,107,107,0.25); }
+.verdict-warn{ background:var(--warn-bg); color:var(--warn); border:1px solid rgba(240,173,78,0.25); }
+
+.risk-pill{
+  font-family:var(--mono); font-size:10.5px; font-weight:500;
+  padding:4px 10px; border-radius:20px; letter-spacing:0.05em; text-transform:uppercase;
+}
+.risk-low{ background:var(--safe-bg); color:var(--safe); border:1px solid rgba(91,224,138,0.2); }
+.risk-medium{ background:var(--warn-bg); color:var(--warn); border:1px solid rgba(240,173,78,0.2); }
+.risk-high{ background:var(--danger-bg); color:var(--danger); border:1px solid rgba(255,107,107,0.2); }
+
+.content-type-pill{
+  font-family:var(--mono); font-size:10.5px;
+  padding:4px 10px; border-radius:20px; letter-spacing:0.05em; text-transform:uppercase;
+  background:var(--surface-2); color:var(--text-dim); border:1px solid var(--border);
+}
+
+.cached-pill{
+  font-family:var(--mono); font-size:10.5px; color:var(--cyan);
+  background:var(--cyan-dim); border:1px solid var(--cyan-line);
+  border-radius:4px; padding:4px 9px;
+}
+
+.timing{ font-family:var(--mono); font-size:10.5px; color:var(--text-mute); display:flex; gap:10px; }
+.timing b{ color:var(--text-dim); font-weight:500; }
+
+.meta-row{ display:flex; flex-wrap:wrap; gap:7px; margin-bottom:16px; }
+.meta-chip{
+  font-family:var(--mono); font-size:10.5px; padding:4px 10px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:20px; color:var(--text-mute);
+}
+.meta-chip b{ color:var(--text-dim); font-weight:500; }
+
+/* elevator pitch — featured card */
+.elevator{
+  background:linear-gradient(135deg, rgba(77,216,199,0.08), rgba(77,216,199,0.02));
+  border:1px solid var(--cyan-line);
+  border-radius:7px;
+  padding:14px 18px;
+  margin-bottom:14px;
+  font-size:14px; line-height:1.55; color:var(--text);
+  position:relative;
+}
+.elevator::before{
+  content:'"';
+  position:absolute; left:8px; top:-2px;
+  font-family:var(--display); font-size:32px;
+  color:var(--cyan); opacity:0.4;
+}
+.elevator .pitch-text{ padding-left:14px; display:block; }
+
+.readout-label{
+  font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:0.14em; text-transform:uppercase;
+  color:var(--text-mute); margin:14px 0 10px;
+  display:flex; align-items:center; gap:8px;
+}
+.readout-label::after{ content:''; flex:1; height:1px; background:var(--border); }
+
+.signal-box{
+  background:var(--bg); border:1px solid var(--border); border-radius:7px; padding:18px 20px;
+}
+.signal-line{
+  display:flex; gap:11px; font-size:13.5px; line-height:1.65; color:var(--text);
+  padding:9px 0; border-bottom:1px solid var(--border);
+}
+.signal-line:last-child{ border-bottom:none; padding-bottom:0; }
+.signal-line:first-child{ padding-top:0; }
+.signal-line .idx{
+  font-family:var(--mono); font-size:11px; color:var(--cyan); flex-shrink:0; margin-top:3px; opacity:0.7;
+}
+
+/* outbound links */
+.outbound-list{
+  display:flex; flex-wrap:wrap; gap:6px;
+  background:var(--bg); border:1px solid var(--border); border-radius:7px;
+  padding:12px 14px;
+}
+.outbound-link{
+  font-family:var(--mono); font-size:11px;
+  padding:3px 9px; border:1px solid var(--border); border-radius:3px;
+  color:var(--text-dim); background:var(--surface-2);
+}
+.outbound-link:hover{ color:var(--cyan); border-color:var(--cyan-line); }
+
+/* Wire enrichment — chip + panel, made unmissable */
+.wire-chip{
+  display:inline-flex; align-items:center; gap:5px;
+  font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:0.04em;
+  padding:4px 10px; border-radius:20px;
+  background:linear-gradient(135deg, rgba(77,216,199,0.22), rgba(77,216,199,0.08));
+  border:1px solid var(--cyan-line); color:var(--cyan);
+  box-shadow:0 0 10px rgba(77,216,199,0.18);
+}
+.wire-panel{
+  background:linear-gradient(135deg, rgba(77,216,199,0.07), transparent);
+  border:1px solid var(--cyan-line); border-radius:8px;
+  padding:14px 16px; margin:14px 0;
+}
+.wire-panel-head{
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;
+  margin-bottom:10px;
+}
+.wire-badge{
+  font-family:var(--mono); font-size:11.5px; font-weight:700; letter-spacing:0.04em;
+  color:var(--cyan);
+}
+.wire-service{
+  font-family:var(--mono); font-size:10.5px; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.04em;
+}
+.wire-grid{ display:flex; flex-direction:column; gap:4px; }
+.wire-row{
+  display:flex; gap:10px; font-family:var(--mono); font-size:12px;
+  padding:5px 0; border-bottom:1px dashed var(--border);
+}
+.wire-row:last-child{ border-bottom:none; }
+.wire-key{ color:var(--text-mute); min-width:120px; flex-shrink:0; }
+.wire-val{ color:var(--text); word-break:break-word; }
+
+.reason-box{
+  background:var(--danger-bg); border:1px solid rgba(255,107,107,0.18); border-radius:7px;
+  padding:15px 16px; font-size:14px; line-height:1.6; color:#ffb3b3;
+}
+.error-box{
+  background:var(--warn-bg); border:1px solid rgba(240,173,78,0.18); border-radius:7px;
+  padding:15px 16px; font-size:14px; line-height:1.6; color:var(--warn);
+}
+
+.action-bar{ display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+.action-btn{
+  font-family:var(--mono); font-size:11px; letter-spacing:0.02em;
+  background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim);
+  padding:8px 14px; border-radius:5px; cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px;
+  transition:all 0.15s;
+}
+.action-btn:hover{ border-color:var(--cyan-line); color:var(--cyan); }
+.action-btn.copied{ border-color:var(--safe); color:var(--safe); }
+.action-btn svg{ flex-shrink:0; }
+
+/* ---------------- COMPARE MODE ---------------- */
+.compare-intro{
+  font-family:var(--mono); font-size:11.5px; color:var(--text-mute);
+  margin-bottom:16px; line-height:1.6;
+}
+.compare-row{ display:flex; gap:10px; margin-bottom:4px; }
+.compare-row .prompt-field{ flex:1; }
+
+.compare-versus{
+  display:flex; align-items:center; justify-content:center; gap:14px;
+  margin:18px 0 14px;
+}
+.compare-versus .vs-pkg{
+  font-family:var(--mono); font-size:13px; font-weight:600; color:var(--text);
+}
+.compare-versus .vs-divider{
+  font-family:var(--display); font-size:11px; color:var(--text-mute); letter-spacing:0.1em;
+}
+
+.compare-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+@media (max-width:480px){ .compare-grid{ grid-template-columns:1fr; } }
+.compare-card{
+  background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:14px 16px;
+}
+.compare-card.not-found{ opacity:0.5; }
+.compare-card-head{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);
+}
+.compare-card-name{ font-family:var(--mono); font-size:13px; font-weight:600; color:var(--cyan); }
+.compare-card-badge{ font-family:var(--mono); font-size:9.5px; color:var(--text-mute); }
+.compare-stat{
+  display:flex; justify-content:space-between; gap:10px;
+  font-family:var(--mono); font-size:12px; padding:5px 0; border-bottom:1px dashed var(--border);
+}
+.compare-stat:last-child{ border-bottom:none; }
+.compare-stat .k{ color:var(--text-mute); }
+.compare-stat .v{ color:var(--text); text-align:right; word-break:break-word; }
+.compare-stat .v.winner{ color:var(--safe); font-weight:600; }
+.compare-empty{
+  font-family:var(--mono); font-size:11.5px; color:var(--text-mute); text-align:center; padding:14px 0;
+}
+
+/* batch result items */
+.batch-item{
+  background:var(--bg); border:1px solid var(--border); border-radius:7px;
+  padding:14px 16px; margin-bottom:10px;
+}
+.batch-item:last-child{ margin-bottom:0; }
+.batch-url{ font-family:var(--mono); font-size:12px; color:var(--text-dim); margin-bottom:8px; word-break:break-all; }
+.batch-summary{ font-size:12.5px; color:var(--text-mute); line-height:1.6; }
+
+.batch-actions{ display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+
+/* ---------------- HISTORY ---------------- */
+.history-section{ width:100%; margin-top:22px; }
+.history-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding:0 2px; }
+.history-title{ font-family:var(--mono); font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-mute); }
+.history-filters{ display:flex; gap:6px; }
+.filter-chip{
+  font-family:var(--mono); font-size:10px; letter-spacing:0.04em; text-transform:uppercase;
+  background:none; border:1px solid var(--border); color:var(--text-mute);
+  padding:4px 9px; border-radius:3px; cursor:pointer;
+}
+.filter-chip.active{ color:var(--cyan); border-color:var(--cyan-line); background:var(--cyan-dim); }
+.filter-chip:hover:not(.active){ color:var(--text-dim); }
+
+.clear-btn{ background:none; border:none; color:var(--text-mute); font-family:var(--mono); font-size:10.5px; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+.clear-btn:hover{ color:var(--text-dim); }
+
+.history-list{ display:flex; flex-direction:column; gap:5px; }
+.history-item{
+  display:flex; align-items:center; gap:10px;
+  background:var(--surface); border:1px solid var(--border); border-radius:6px;
+  padding:9px 12px; cursor:pointer; transition:border-color 0.15s;
+}
+.history-item:hover{ border-color:var(--border-bright); }
+.history-dot{ width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.history-url{ flex:1; font-family:var(--mono); font-size:11.5px; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.history-kind{ font-family:var(--mono); font-size:9.5px; color:var(--text-mute); padding:1px 6px; border:1px solid var(--border); border-radius:3px; }
+.history-tag{ font-family:var(--mono); font-size:10px; color:var(--text-mute); letter-spacing:0.04em; text-transform:uppercase; }
+
+/* ---------------- TOAST ---------------- */
+#toast{
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px);
+  background:var(--surface-3); border:1px solid var(--cyan-line); color:var(--cyan);
+  font-family:var(--mono); font-size:12px;
+  padding:10px 18px; border-radius:6px;
+  opacity:0; pointer-events:none;
+  transition:all 0.25s;
+  z-index:100;
+  box-shadow:0 10px 30px -10px rgba(0,0,0,0.6);
+}
+#toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+footer{
+  margin-top:36px; font-family:var(--mono); font-size:10.5px; color:var(--text-mute);
+  letter-spacing:0.04em; text-align:center;
+}
+footer .sep{ margin:0 8px; opacity:0.4; }
+
+@media (max-width:480px){
+  .scan-row{ flex-direction:column; }
+  button.scan-btn{ padding:12px 0; justify-content:center; }
+  .scan-steps{ flex-wrap:wrap; gap:10px 16px; }
+  .counter-strip{ flex-wrap:wrap; gap:8px; justify-content:center; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <h1>WIRE<span class="dim">SAVANT</span></h1>
+    </div>
+    <p class="tagline">scan a url &middot; read a document &middot; <span class="blip">brief in seconds</span></p>
+    <div class="counter-strip">
+      <span class="led"></span>
+      <span class="seg"><span class="lab">URLS</span><b id="totalCount">0</b></span>
+      <span class="sep"></span>
+      <span class="seg"><span class="lab">FILES</span><b id="totalFilesCount">0</b></span>
+    </div>
+    <div class="kbd-hint">
+      <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>K</kbd> focus &nbsp;&middot;&nbsp; <kbd>Esc</kbd> reset &nbsp;&middot;&nbsp; <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>V</kbd> paste to scan
+    </div>
+  </header>
+
+  <div class="panel">
+    <div class="panel-inner">
+
+      <div class="mode-row">
+        <button class="mode-btn active" id="tabSingle" onclick="switchTab('single')">Single URL</button>
+        <button class="mode-btn" id="tabBatch" onclick="switchTab('batch')">Batch &middot; up to 5</button>
+        <button class="mode-btn" id="tabDoc" onclick="switchTab('doc')">Document</button>
+        <button class="mode-btn" id="tabCompare" onclick="switchTab('compare')">Compare</button>
+      </div>
+
+      <!-- SINGLE -->
+      <div id="singlePane" class="active">
+        <div class="scan-row">
+          <div class="prompt-field">
+            <span class="caret">&gt;</span>
+            <input type="text" id="urlInput" placeholder="https://target-domain.com" autocomplete="off" spellcheck="false">
+          </div>
+          <button class="scan-btn" id="analyzeBtn" onclick="analyzeUrl()">
+            <div class="spinner-dot" id="spinner"></div>
+            <span id="btnLabel">Scan</span>
+          </button>
+        </div>
+
+        <div class="examples-label">Sample targets</div>
+        <div class="target-chips">
+          <button class="chip" onclick="loadExample('https://stripe.com')">stripe.com</button>
+          <button class="chip" onclick="loadExample('https://vercel.com')">vercel.com</button>
+          <button class="chip" onclick="loadExample('https://linear.app')">linear.app</button>
+          <button class="chip" onclick="loadExample('https://github.com')">github.com</button>
+        </div>
+
+        <!-- Radar scan signature element -->
+        <div id="scanStage">
+          <div class="radar">
+            <div class="radar-cross"></div>
+            <div class="radar-sweep"></div>
+            <div class="radar-core"></div>
+            <div class="radar-blip" style="top:28%; left:64%; animation-delay:0.2s;"></div>
+            <div class="radar-blip" style="top:62%; left:38%; animation-delay:1.1s;"></div>
+            <div class="radar-blip" style="top:45%; left:75%; animation-delay:0.7s;"></div>
+          </div>
+          <div class="scan-readout">scanning <span class="target-url" id="scanTargetLabel"></span></div>
+          <div class="scan-steps">
+            <span class="s" id="step-scrape">fetch</span>
+            <span class="s" id="step-security">analyze</span>
+            <span class="s" id="step-summary">summarize</span>
+          </div>
+        </div>
+
+        <!-- Result -->
+        <div id="result">
+          <div class="result-top">
+            <div class="tag-group">
+              <div id="badge"></div>
+              <div id="riskPill"></div>
+              <div id="contentTypePill"></div>
+              <div id="cachedPill"></div>
+              <div id="wireChip"></div>
+            </div>
+            <div class="timing" id="timing"></div>
+          </div>
+          <div id="metaRow" class="meta-row"></div>
+          <div id="elevatorBox"></div>
+          <div id="resultLabel" class="readout-label"></div>
+          <div id="content"></div>
+          <div id="wireBox"></div>
+          <div id="outboundBox"></div>
+          <div class="action-bar">
+            <button class="action-btn" id="copyBtn" onclick="copySummary()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              Copy summary
+            </button>
+            <button class="action-btn" onclick="exportMarkdown()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export .md
+            </button>
+            <button class="action-btn" onclick="exportJSON()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Export .json
+            </button>
+            <button class="action-btn" onclick="shareLink()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+              Share link
+            </button>
+            <button class="action-btn" id="docxBtn" onclick="exportDocxReport()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+              Download .docx
+            </button>
+            <button class="action-btn" onclick="resetUI()">Scan another target</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- BATCH -->
+      <div id="batchPane">
+        <textarea id="batchInput" placeholder="https://stripe.com&#10;https://vercel.com&#10;https://linear.app"></textarea>
+        <button class="scan-btn" onclick="batchAnalyze()" id="batchBtn" style="width:100%; justify-content:center; padding:11px 0;">
+          <div class="spinner-dot" id="batchSpinner"></div>
+          <span id="batchBtnLabel">Scan All</span>
+        </button>
+        <div id="batchResult"></div>
+      </div>
+
+      <!-- DOCUMENT -->
+      <div id="docPane">
+        <div class="drop-zone" id="dropZone">
+          <div class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <div class="title">Drop file here or <b>click to browse</b></div>
+          <div class="sub">Max 15MB &middot; or press <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>U</kbd></div>
+          <input type="file" id="fileInput" accept=".pdf,.docx,.pptx">
+        </div>
+        <div class="doc-types">
+          <span class="doc-type">PDF <b>.pdf</b></span>
+          <span class="doc-type">Word <b>.docx</b></span>
+          <span class="doc-type">PowerPoint <b>.pptx</b></span>
+        </div>
+
+        <div id="scanStageDoc" style="display:none">
+          <div class="radar">
+            <div class="radar-cross"></div>
+            <div class="radar-sweep"></div>
+            <div class="radar-core"></div>
+            <div class="radar-blip" style="top:28%; left:64%; animation-delay:0.2s;"></div>
+            <div class="radar-blip" style="top:62%; left:38%; animation-delay:1.1s;"></div>
+          </div>
+          <div class="scan-readout">parsing <span class="target-url" id="scanDocLabel"></span></div>
+          <div class="scan-steps">
+            <span class="s" id="step-parse">parse</span>
+            <span class="s" id="step-security-d">analyze</span>
+            <span class="s" id="step-summary-d">summarize</span>
+          </div>
+        </div>
+
+        <div id="docResult">
+          <div class="result-top">
+            <div class="tag-group">
+              <div id="docBadge"></div>
+              <div id="docRiskPill"></div>
+              <div id="docContentTypePill"></div>
+              <div id="docCachedPill"></div>
+            </div>
+            <div class="timing" id="docTiming"></div>
+          </div>
+          <div id="docMetaRow" class="meta-row"></div>
+          <div id="docElevatorBox"></div>
+          <div id="docResultLabel" class="readout-label"></div>
+          <div id="docContent"></div>
+          <div class="action-bar">
+            <button class="action-btn" id="docCopyBtn" onclick="copyDocSummary()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              Copy summary
+            </button>
+            <button class="action-btn" onclick="exportDocMarkdown()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export .md
+            </button>
+            <button class="action-btn" onclick="exportDocJSON()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Export .json
+            </button>
+            <button class="action-btn" onclick="exportDocxReportDoc()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+              Download .docx
+            </button>
+            <button class="action-btn" onclick="resetDocUI()">Scan another file</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPARE (Wire-powered, npm/pypi) -->
+      <div id="comparePane">
+        <div class="compare-intro">Pulls live registry stats for two packages via Wire, side-by-side.</div>
+        <div class="mode-row" style="margin-bottom:14px;">
+          <button class="mode-btn active" id="ecoNpm" onclick="setCompareEcosystem('npm')">npm</button>
+          <button class="mode-btn" id="ecoPypi" onclick="setCompareEcosystem('pypi')">pypi</button>
+        </div>
+        <div class="compare-row">
+          <div class="prompt-field">
+            <span class="caret">A</span>
+            <input type="text" id="compareInputA" placeholder="e.g. react" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="prompt-field">
+            <span class="caret">B</span>
+            <input type="text" id="compareInputB" placeholder="e.g. vue" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <button class="scan-btn" onclick="comparePackages()" id="compareBtn" style="width:100%; justify-content:center; padding:11px 0; margin-top:10px;">
+          <div class="spinner-dot" id="compareSpinner"></div>
+          <span id="compareBtnLabel">Compare via Wire</span>
+        </button>
+        <div id="compareResult"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="history-section" id="historySection" style="display:none">
+    <div class="history-head">
+      <div class="history-title">Recent Scans</div>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <div class="history-filters" id="historyFilters">
+          <button class="filter-chip active" data-filter="all" onclick="setHistoryFilter('all')">All</button>
+          <button class="filter-chip" data-filter="url" onclick="setHistoryFilter('url')">URL</button>
+          <button class="filter-chip" data-filter="doc" onclick="setHistoryFilter('doc')">Docs</button>
+        </div>
+        <button class="clear-btn" onclick="clearHistory()">Clear</button>
+      </div>
+    </div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+
+  <footer>Scrape: Anakin<span class="sep">/</span>Inference: Groq · llama-3.1-8b-instant</footer>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// =============================================================================
+// STATE
+// =============================================================================
+const urlInput = document.getElementById('urlInput');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const spinner = document.getElementById('spinner');
+const btnLabel = document.getElementById('btnLabel');
+const scanStage = document.getElementById('scanStage');
+const resultDiv = document.getElementById('result');
+const badgeDiv = document.getElementById('badge');
+const contentDiv = document.getElementById('content');
+
+let history = loadHistoryFromStorage();
+let historyFilter = 'all';
+let currentSummaryText = '';
+let currentResult = null;     // last single URL result
+let currentDocResult = null;  // last document result
+let currentUrl = '';
+
+// =============================================================================
+// UTILITIES
+// =============================================================================
+function escHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function summaryToText(s) { return Array.isArray(s) ? s.join('\n') : String(s || ''); }
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function downloadBlob(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 200);
+}
+
+function safeFilename(s, fallback = 'wiresavant') {
+  return (s || fallback).replace(/[^a-z0-9_\-.]+/gi, '_').slice(0, 80) || fallback;
+}
+
+// =============================================================================
+// HISTORY PERSISTENCE (localStorage — survives page refresh)
+// =============================================================================
+const HISTORY_STORAGE_KEY = 'wiresavant_history_v1';
+
+function loadHistoryFromStorage() {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistoryToStorage() {
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+  } catch {
+    // storage unavailable/full — fail silently, history just won't persist
+  }
+}
+
+// =============================================================================
+// COUNTERS
+// =============================================================================
+async function refreshCounter() {
+  try {
+    const r = await fetch('/stats');
+    const d = await r.json();
+    document.getElementById('totalCount').textContent = d.total_analyzed || 0;
+    document.getElementById('totalFilesCount').textContent = d.total_files_analyzed || 0;
+  } catch {}
+}
+refreshCounter();
+
+// =============================================================================
+// TABS
+// =============================================================================
+function switchTab(tab) {
+  ['tabSingle', 'tabBatch', 'tabDoc', 'tabCompare'].forEach((id, i) => {
+    const tabs = ['single', 'batch', 'doc', 'compare'];
+    document.getElementById(id).classList.toggle('active', tabs[i] === tab);
+  });
+  document.getElementById('singlePane').classList.toggle('active', tab === 'single');
+  document.getElementById('batchPane').classList.toggle('active', tab === 'batch');
+  document.getElementById('docPane').classList.toggle('active', tab === 'doc');
+  document.getElementById('comparePane').classList.toggle('active', tab === 'compare');
+}
+
+// =============================================================================
+// SHARED RESULT RENDERER (used by URL scan + doc scan)
+// =============================================================================
+function renderResult(data, opts) {
+  // opts: { badgeEl, riskEl, contentTypeEl, cachedEl, metaEl, elevatorEl, labelEl, contentEl, outboundEl, timingEl, kind: 'url'|'doc' }
+  const timing = opts.timingEl;
+  const metaRow = opts.metaEl;
+  const resultLabel = opts.labelEl;
+  const contentEl = opts.contentEl;
+  const cachedEl = opts.cachedEl;
+  const riskEl = opts.riskEl;
+  const contentTypeEl = opts.contentTypeEl;
+  const elevatorEl = opts.elevatorEl;
+  const outboundEl = opts.outboundEl;
+
+  cachedEl.innerHTML = data.cached ? '<span class="cached-pill">⚡ cached</span>' : '';
+
+  if (opts.wireChipEl) {
+    opts.wireChipEl.innerHTML = (data.wire_data && data.wire_data.data)
+      ? `<span class="wire-chip">⚡ Wire: ${escHtml(data.wire_data.service)}</span>`
+      : '';
+  }
+
+  const t1 = data.parse_time ?? data.scrape_time;
+  const t2 = data.ai_time;
+  if (!data.cached && (t1 != null || t2 != null)) {
+    const fetchLabel = opts.kind === 'doc' ? 'parse' : 'fetch';
+    timing.innerHTML = `<span>${fetchLabel} <b>${t1}s</b></span><span>infer <b>${t2}s</b></span>`;
+  } else {
+    timing.innerHTML = '';
+  }
+
+  riskEl.innerHTML = data.risk_level ? `<span class="risk-pill risk-${escHtml(data.risk_level)}">${escHtml(data.risk_level)} risk</span>` : '';
+  contentTypeEl.innerHTML = data.content_type && data.content_type !== 'other'
+    ? `<span class="content-type-pill">${escHtml(data.content_type)}</span>` : '';
+
+  // meta chips
+  let metaHtml = '';
+  if (data.page_title) metaHtml += `<span class="meta-chip">title <b>${escHtml(data.page_title)}</b></span>`;
+  if (data.filename) metaHtml += `<span class="meta-chip">file <b>${escHtml(data.filename)}</b></span>`;
+  if (data.file_meta) {
+    if (data.file_meta.pages) metaHtml += `<span class="meta-chip">pages <b>${data.file_meta.pages}</b></span>`;
+    if (data.file_meta.slides) metaHtml += `<span class="meta-chip">slides <b>${data.file_meta.slides}</b></span>`;
+    if (data.file_meta.paragraphs) metaHtml += `<span class="meta-chip">paragraphs <b>${data.file_meta.paragraphs}</b></span>`;
+  }
+  if (data.tech_stack && data.tech_stack.length) {
+    metaHtml += `<span class="meta-chip">stack <b>${data.tech_stack.slice(0,4).map(escHtml).join(', ')}</b></span>`;
+  }
+  if (data.social_links && data.social_links.length) {
+    metaHtml += `<span class="meta-chip">social <b>${data.social_links.slice(0,3).map(escHtml).join(', ')}</b></span>`;
+  }
+  metaRow.innerHTML = metaHtml;
+
+  // elevator pitch
+  if (data.elevator_pitch && data.is_safe) {
+    elevatorEl.innerHTML = `<div class="elevator"><span class="pitch-text">${escHtml(data.elevator_pitch)}</span></div>`;
+  } else {
+    elevatorEl.innerHTML = '';
+  }
+
+  // body
+  if (data.error) {
+    opts.badgeEl.innerHTML = `<div class="verdict verdict-warn"><span class="dot"></span>Error</div>`;
+    resultLabel.textContent = '';
+    contentEl.innerHTML = `<div class="error-box">${escHtml(summaryToText(data.summary))}</div>`;
+  } else if (data.is_safe) {
+    opts.badgeEl.innerHTML = `<div class="verdict verdict-safe"><span class="dot"></span>Clean</div>`;
+    resultLabel.textContent = 'Signal Readout';
+    const bullets = Array.isArray(data.summary) ? data.summary : [data.summary];
+    contentEl.innerHTML = `<div class="signal-box">${bullets.map((b,i) =>
+      `<div class="signal-line"><span class="idx">${String(i+1).padStart(2,'0')}</span><div>${escHtml(b)}</div></div>`
+    ).join('')}</div>`;
+  } else {
+    opts.badgeEl.innerHTML = `<div class="verdict verdict-danger"><span class="dot"></span>Threat Detected</div>`;
+    resultLabel.textContent = 'Risk Reason';
+    contentEl.innerHTML = `<div class="reason-box">${escHtml(summaryToText(data.summary))}</div>`;
+  }
+
+  // outbound links (URL scans only)
+  if (outboundEl) {
+    if (data.outbound_links && data.outbound_links.length) {
+      outboundEl.innerHTML = `
+        <div class="readout-label">Outbound Links <span style="color:var(--text-mute); text-transform:none; letter-spacing:0;">· ${data.outbound_links.length} external domains</span></div>
+        <div class="outbound-list">
+          ${data.outbound_links.map(l => `<span class="outbound-link">${escHtml(l)}</span>`).join('')}
+        </div>`;
+    } else {
+      outboundEl.innerHTML = '';
+    }
+  }
+
+  // Wire enrichment — surfaced prominently, not just a quiet background step
+  if (opts.wireEl) {
+    if (data.wire_data && data.wire_data.data) {
+      const wd = data.wire_data;
+      const rows = Object.entries(wd.data).slice(0, 8).map(([k, v]) => {
+        const val = (v && typeof v === 'object') ? JSON.stringify(v) : String(v);
+        return `<div class="wire-row"><span class="wire-key">${escHtml(k)}</span><span class="wire-val">${escHtml(val)}</span></div>`;
+      }).join('');
+      opts.wireEl.innerHTML = `
+        <div class="wire-panel">
+          <div class="wire-panel-head">
+            <span class="wire-badge">⚡ Enriched via Wire</span>
+            <span class="wire-service">${escHtml(wd.service)} · ${escHtml(wd.action_id || '')}</span>
+          </div>
+          <div class="wire-grid">${rows}</div>
+        </div>`;
+    } else {
+      opts.wireEl.innerHTML = '';
+    }
+  }
+}
+
+// =============================================================================
+// URL SCAN
+// =============================================================================
+function setStep(step, state) {
+  const el = document.getElementById(`step-${step}`);
+  if (!el) return;
+  el.className = 's' + (state === 'active' ? ' active' : state === 'done' ? ' done' : '');
+}
+function resetSteps() { ['scrape','security','summary'].forEach(s => setStep(s, 'pending')); }
+function resetDocSteps() { ['parse','security-d','summary-d'].forEach(s => setStep(s, 'pending')); }
+
+async function analyzeUrl() {
+  const url = urlInput.value.trim();
+  if (!url) return;
+  currentUrl = url;
+
+  analyzeBtn.disabled = true;
+  spinner.style.display = 'block';
+  btnLabel.textContent = 'Scanning';
+  resultDiv.style.display = 'none';
+  scanStage.style.display = 'block';
+  document.getElementById('scanTargetLabel').textContent = url.replace(/^https?:\/\//, '');
+  resetSteps();
+
+  setStep('scrape', 'active');
+  const t1 = setTimeout(() => { setStep('scrape', 'done'); setStep('security', 'active'); }, 4000);
+  const t2 = setTimeout(() => { setStep('security', 'done'); setStep('summary', 'active'); }, 9000);
+
+  try {
+    const resp = await fetch('/analyze?url=' + encodeURIComponent(url));
+    const data = await resp.json();
+
+    clearTimeout(t1); clearTimeout(t2);
+    setStep('scrape', 'done'); setStep('security', 'done'); setStep('summary', 'done');
+
+    await new Promise(r => setTimeout(r, 350));
+    scanStage.style.display = 'none';
+    resultDiv.style.display = 'block';
+    currentResult = { ...data, _sourceUrl: url };
+    renderResult(data, {
+      badgeEl: badgeDiv, riskEl: document.getElementById('riskPill'),
+      contentTypeEl: document.getElementById('contentTypePill'),
+      cachedEl: document.getElementById('cachedPill'),
+      wireChipEl: document.getElementById('wireChip'),
+      wireEl: document.getElementById('wireBox'),
+      metaEl: document.getElementById('metaRow'),
+      elevatorEl: document.getElementById('elevatorBox'),
+      labelEl: document.getElementById('resultLabel'),
+      contentEl: contentDiv,
+      outboundEl: document.getElementById('outboundBox'),
+      timingEl: document.getElementById('timing'),
+      kind: 'url',
+    });
+    currentSummaryText = data.is_safe
+      ? [data.elevator_pitch, ...(Array.isArray(data.summary) ? data.summary : [data.summary])].filter(Boolean).join('\n')
+      : summaryToText(data.summary);
+    addToHistory({ kind: 'url', url, data });
+    refreshCounter();
+
+  } catch (err) {
+    clearTimeout(t1); clearTimeout(t2);
+    scanStage.style.display = 'none';
+    resultDiv.style.display = 'block';
+    badgeDiv.innerHTML = `<div class="verdict verdict-warn"><span class="dot"></span>Error</div>`;
+    document.getElementById('resultLabel').textContent = '';
+    contentDiv.innerHTML = `<div class="error-box">Scan failed to complete. Make sure the backend is running.</div>`;
+  } finally {
+    analyzeBtn.disabled = false;
+    spinner.style.display = 'none';
+    btnLabel.textContent = 'Scan';
+  }
+}
+
+function loadExample(url) { urlInput.value = url; urlInput.focus(); analyzeUrl(); }
+
+function copySummary() {
+  if (!currentSummaryText) return;
+  navigator.clipboard.writeText(currentSummaryText).then(() => toast('Summary copied'));
+}
+
+function exportMarkdown() {
+  if (!currentResult) return;
+  const md = resultToMarkdown(currentResult, currentUrl);
+  downloadBlob(`${safeFilename(currentUrl)}.md`, md, 'text/markdown');
+  toast('Markdown exported');
+}
+
+function exportJSON() {
+  if (!currentResult) return;
+  downloadBlob(`${safeFilename(currentUrl)}.json`, JSON.stringify(currentResult, null, 2), 'application/json');
+  toast('JSON exported');
+}
+
+async function exportDocxReport() {
+  if (!currentResult) return;
+  await downloadDocxReport(`WireSavant Report — ${currentUrl}`, currentResult, safeFilename(currentUrl));
+}
+
+async function exportDocxReportDoc() {
+  if (!currentDocResult) return;
+  await downloadDocxReport(`WireSavant Document Report — ${currentDocResult.filename || 'document'}`, currentDocResult, safeFilename(currentDocResult._filename, 'document'));
+}
+
+async function downloadDocxReport(title, data, filenameBase) {
+  toast('Generating report…');
+  try {
+    const resp = await fetch('/export-docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, data }),
+    });
+    if (!resp.ok) throw new Error('export failed');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${filenameBase}.docx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 200);
+    toast('Report downloaded');
+  } catch (err) {
+    toast('Could not generate report');
+  }
+}
+
+function shareLink() {
+  if (!currentUrl) return;
+  const shareUrl = `${location.origin}/result?url=${encodeURIComponent(currentUrl)}`;
+  navigator.clipboard.writeText(shareUrl).then(() => toast('Shareable link copied'));
+}
+
+function resetUI() {
+  urlInput.value = '';
+  resultDiv.style.display = 'none';
+  scanStage.style.display = 'none';
+  urlInput.focus();
+  currentUrl = '';
+  currentSummaryText = '';
+  currentResult = null;
+}
+
+// =============================================================================
+// BATCH
+// =============================================================================
+async function batchAnalyze() {
+  const raw = document.getElementById('batchInput').value.trim();
+  const urls = raw.split('\n').map(u => u.trim()).filter(u => u.startsWith('http'));
+  if (!urls.length) { toast('Add at least one URL'); return; }
+
+  const btn = document.getElementById('batchBtn');
+  const batchSpinner = document.getElementById('batchSpinner');
+  const batchBtnLabel = document.getElementById('batchBtnLabel');
+  btn.disabled = true;
+  batchSpinner.style.display = 'block';
+  batchBtnLabel.textContent = 'Scanning...';
+
+  const batchResult = document.getElementById('batchResult');
+  batchResult.style.display = 'none';
+
+  try {
+    const resp = await fetch('/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls })
+    });
+    const data = await resp.json();
+    window._lastBatch = data.results;
+
+    batchResult.style.display = 'block';
+    batchResult.innerHTML = `
+      <div class="readout-label">Batch Readout <span style="color:var(--text-mute); text-transform:none; letter-spacing:0;">· ${data.results.length} targets</span></div>
+      ${data.results.map(r => {
+        const err = r.error;
+        const safe = r.is_safe;
+        const verdictClass = err ? 'verdict-warn' : safe ? 'verdict-safe' : 'verdict-danger';
+        const label = err ? 'Error' : safe ? 'Clean' : 'Threat';
+        const pitch = r.elevator_pitch ? `<div style="font-size:12px; color:var(--text-dim); font-style:italic; margin-bottom:6px;">"${escHtml(r.elevator_pitch)}"</div>` : '';
+        const summary = Array.isArray(r.summary) ? r.summary.join(' · ') : (r.summary || '');
+        return `<div class="batch-item">
+          <div class="batch-url">${escHtml(r.url)}</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px; flex-wrap:wrap;">
+            <div class="verdict ${verdictClass}"><span class="dot"></span>${label}</div>
+            ${r.risk_level ? `<span class="risk-pill risk-${escHtml(r.risk_level)}">${escHtml(r.risk_level)} risk</span>` : ''}
+            ${r.content_type && r.content_type !== 'other' ? `<span class="content-type-pill">${escHtml(r.content_type)}</span>` : ''}
+          </div>
+          ${pitch}
+          <div class="batch-summary">${escHtml(summary)}</div>
+        </div>`;
+      }).join('')}
+      <div class="batch-actions">
+        <button class="action-btn" onclick="exportBatchCSV()">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+        <button class="action-btn" onclick="exportBatchMarkdown()">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export Markdown
+        </button>
+      </div>
+    `;
+    refreshCounter();
+  } catch (e) {
+    batchResult.style.display = 'block';
+    batchResult.innerHTML = '<div class="error-box">Batch scan failed.</div>';
+  } finally {
+    btn.disabled = false;
+    batchSpinner.style.display = 'none';
+    batchBtnLabel.textContent = 'Scan All';
+  }
+}
+
+function exportBatchCSV() {
+  const rows = window._lastBatch;
+  if (!rows || !rows.length) return;
+  const cols = ['url', 'is_safe', 'risk_level', 'content_type', 'page_title', 'elevator_pitch', 'summary', 'tech_stack', 'social_links', 'cached', 'error'];
+  const esc = v => {
+    const s = v == null ? '' : Array.isArray(v) ? v.join('; ') : String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [cols.join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\n');
+  downloadBlob(`wiresavant_batch_${new Date().toISOString().slice(0,10)}.csv`, csv, 'text/csv');
+  toast('CSV exported');
+}
+
+function exportBatchMarkdown() {
+  const rows = window._lastBatch;
+  if (!rows || !rows.length) return;
+  const lines = [`# WireSavant Batch Report`, ``, `*Generated ${new Date().toISOString()}*`, ``];
+  rows.forEach((r, i) => {
+    const status = r.error ? 'Error' : r.is_safe ? 'Clean' : 'Threat';
+    lines.push(`## ${i+1}. ${r.url}`);
+    lines.push(``);
+    lines.push(`- **Status:** ${status}${r.risk_level ? ` (${r.risk_level} risk)` : ''}`);
+    if (r.content_type && r.content_type !== 'other') lines.push(`- **Type:** ${r.content_type}`);
+    if (r.page_title) lines.push(`- **Title:** ${r.page_title}`);
+    if (r.elevator_pitch) lines.push(``);
+    if (r.elevator_pitch) lines.push(`> ${r.elevator_pitch}`);
+    if (r.elevator_pitch) lines.push(``);
+    if (Array.isArray(r.summary)) r.summary.forEach(b => lines.push(`- ${b}`));
+    else if (r.summary) lines.push(`- ${r.summary}`);
+    lines.push(``);
+  });
+  downloadBlob(`wiresavant_batch_${new Date().toISOString().slice(0,10)}.md`, lines.join('\n'), 'text/markdown');
+  toast('Markdown exported');
+}
+
+// =============================================================================
+// COMPARE (Wire-powered npm/pypi side-by-side)
+// =============================================================================
+let compareEcosystem = 'npm';
+
+function setCompareEcosystem(eco) {
+  compareEcosystem = eco;
+  document.getElementById('ecoNpm').classList.toggle('active', eco === 'npm');
+  document.getElementById('ecoPypi').classList.toggle('active', eco === 'pypi');
+  document.getElementById('compareInputA').placeholder = eco === 'npm' ? 'e.g. react' : 'e.g. requests';
+  document.getElementById('compareInputB').placeholder = eco === 'npm' ? 'e.g. vue' : 'e.g. httpx';
+}
+
+// Fields worth surfacing if present in the Wire payload, in priority order
+const COMPARE_FIELD_ORDER = [
+  'downloads', 'weekly_downloads', 'monthly_downloads', 'total_downloads',
+  'version', 'latest_version', 'license', 'stars', 'forks', 'maintainers',
+  'description', 'homepage', 'repository', 'last_published', 'published_at',
+];
+
+function comparePackages() {
+  const a = document.getElementById('compareInputA').value.trim();
+  const b = document.getElementById('compareInputB').value.trim();
+  if (!a || !b) { toast('Enter both package names'); return; }
+
+  const btn = document.getElementById('compareBtn');
+  const spinner = document.getElementById('compareSpinner');
+  const label = document.getElementById('compareBtnLabel');
+  const resultEl = document.getElementById('compareResult');
+  btn.disabled = true;
+  spinner.style.display = 'block';
+  label.textContent = 'Comparing…';
+  resultEl.innerHTML = '';
+
+  fetch('/compare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ecosystem: compareEcosystem, package_a: a, package_b: b }),
+  })
+    .then(r => r.json())
+    .then(data => renderCompareResult(data))
+    .catch(() => {
+      resultEl.innerHTML = '<div class="error-box">Compare request failed. Make sure the backend is running.</div>';
+    })
+    .finally(() => {
+      btn.disabled = false;
+      spinner.style.display = 'none';
+      label.textContent = 'Compare via Wire';
+    });
+}
+
+function renderCompareCard(pkg) {
+  if (!pkg.found || !pkg.data) {
+    return `<div class="compare-card not-found">
+      <div class="compare-card-head">
+        <span class="compare-card-name">${escHtml(pkg.name)}</span>
+        <span class="compare-card-badge">not found</span>
+      </div>
+      <div class="compare-empty">No Wire data for this package.</div>
+    </div>`;
+  }
+  const data = pkg.data;
+  const keys = Object.keys(data);
+  const ordered = COMPARE_FIELD_ORDER.filter(k => keys.includes(k))
+    .concat(keys.filter(k => !COMPARE_FIELD_ORDER.includes(k)));
+  const rows = ordered.slice(0, 10).map(k => {
+    const v = data[k];
+    const val = (v && typeof v === 'object') ? JSON.stringify(v) : String(v);
+    return `<div class="compare-stat"><span class="k">${escHtml(k)}</span><span class="v">${escHtml(val)}</span></div>`;
+  }).join('');
+  return `<div class="compare-card">
+    <div class="compare-card-head">
+      <span class="compare-card-name">${escHtml(pkg.name)}</span>
+      <span class="compare-card-badge">Wire</span>
+    </div>
+    ${rows || '<div class="compare-empty">No fields returned.</div>'}
+  </div>`;
+}
+
+function renderCompareResult(data) {
+  const resultEl = document.getElementById('compareResult');
+  if (!data || (!data.a && !data.b)) {
+    resultEl.innerHTML = '<div class="error-box">Compare failed.</div>';
+    return;
+  }
+  resultEl.innerHTML = `
+    <div class="compare-versus">
+      <span class="vs-pkg">${escHtml(data.a.name)}</span>
+      <span class="vs-divider">VS</span>
+      <span class="vs-pkg">${escHtml(data.b.name)}</span>
+    </div>
+    <div class="compare-grid">
+      ${renderCompareCard(data.a)}
+      ${renderCompareCard(data.b)}
+    </div>`;
+}
+
+// =============================================================================
+// DOCUMENT SCAN
+// =============================================================================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const scanStageDoc = document.getElementById('scanStageDoc');
+const docResultDiv = document.getElementById('docResult');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    handleFile(e.dataTransfer.files[0]);
+  }
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+async function handleFile(file) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!['pdf','docx','pptx'].includes(ext)) {
+    toast('Only PDF, DOCX, PPTX supported');
+    return;
+  }
+  if (file.size > 15 * 1024 * 1024) {
+    toast('File too large (max 15MB)');
+    return;
+  }
+
+  docResultDiv.style.display = 'none';
+  scanStageDoc.style.display = 'block';
+  document.getElementById('scanDocLabel').textContent = file.name;
+  resetDocSteps();
+
+  setStep('parse', 'active');
+  const t1 = setTimeout(() => { setStep('parse', 'done'); setStep('security-d', 'active'); }, 3000);
+  const t2 = setTimeout(() => { setStep('security-d', 'done'); setStep('summary-d', 'active'); }, 7000);
+
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const resp = await fetch('/scan-file', { method: 'POST', body: fd });
+    const data = await resp.json();
+
+    clearTimeout(t1); clearTimeout(t2);
+    setStep('parse', 'done'); setStep('security-d', 'done'); setStep('summary-d', 'done');
+
+    await new Promise(r => setTimeout(r, 350));
+    scanStageDoc.style.display = 'none';
+
+    if (!resp.ok) {
+      docResultDiv.style.display = 'block';
+      document.getElementById('docBadge').innerHTML = `<div class="verdict verdict-warn"><span class="dot"></span>Error</div>`;
+      document.getElementById('docContent').innerHTML = `<div class="error-box">${escHtml(data.detail || 'Scan failed.')}</div>`;
+      return;
+    }
+
+    docResultDiv.style.display = 'block';
+    currentDocResult = { ...data, _filename: file.name };
+    renderResult(data, {
+      badgeEl: document.getElementById('docBadge'),
+      riskEl: document.getElementById('docRiskPill'),
+      contentTypeEl: document.getElementById('docContentTypePill'),
+      cachedEl: document.getElementById('docCachedPill'),
+      metaEl: document.getElementById('docMetaRow'),
+      elevatorEl: document.getElementById('docElevatorBox'),
+      labelEl: document.getElementById('docResultLabel'),
+      contentEl: document.getElementById('docContent'),
+      outboundEl: null,
+      timingEl: document.getElementById('docTiming'),
+      kind: 'doc',
+    });
+    currentSummaryText = data.is_safe
+      ? [data.elevator_pitch, ...(Array.isArray(data.summary) ? data.summary : [data.summary])].filter(Boolean).join('\n')
+      : summaryToText(data.summary);
+    addToHistory({ kind: 'doc', url: file.name, data });
+    refreshCounter();
+
+  } catch (err) {
+    clearTimeout(t1); clearTimeout(t2);
+    scanStageDoc.style.display = 'none';
+    docResultDiv.style.display = 'block';
+    document.getElementById('docBadge').innerHTML = `<div class="verdict verdict-warn"><span class="dot"></span>Error</div>`;
+    document.getElementById('docContent').innerHTML = `<div class="error-box">Upload failed. Is the backend running?</div>`;
+  }
+}
+
+function copyDocSummary() {
+  if (!currentSummaryText) return;
+  navigator.clipboard.writeText(currentSummaryText).then(() => toast('Summary copied'));
+}
+
+function exportDocMarkdown() {
+  if (!currentDocResult) return;
+  const md = docResultToMarkdown(currentDocResult);
+  downloadBlob(`${safeFilename(currentDocResult._filename, 'document')}.md`, md, 'text/markdown');
+  toast('Markdown exported');
+}
+
+function exportDocJSON() {
+  if (!currentDocResult) return;
+  downloadBlob(`${safeFilename(currentDocResult._filename, 'document')}.json`, JSON.stringify(currentDocResult, null, 2), 'application/json');
+  toast('JSON exported');
+}
+
+function resetDocUI() {
+  fileInput.value = '';
+  docResultDiv.style.display = 'none';
+  scanStageDoc.style.display = 'none';
+  currentDocResult = null;
+}
+
+// =============================================================================
+// MARKDOWN BUILDERS
+// =============================================================================
+function resultToMarkdown(data, url) {
+  const lines = [];
+  lines.push(`# WireSavant Report — ${url}`);
+  lines.push(``);
+  lines.push(`*Generated ${new Date().toISOString()}*`);
+  lines.push(``);
+  const status = data.error ? 'Error' : data.is_safe ? 'Clean' : 'Threat';
+  lines.push(`- **Status:** ${status}${data.risk_level ? ` (${data.risk_level} risk)` : ''}`);
+  if (data.content_type && data.content_type !== 'other') lines.push(`- **Type:** ${data.content_type}`);
+  if (data.page_title) lines.push(`- **Title:** ${data.page_title}`);
+  lines.push(`- **Timing:** fetch ${data.scrape_time ?? 0}s · infer ${data.ai_time ?? 0}s`);
+  lines.push(``);
+  if (data.elevator_pitch && data.is_safe) {
+    lines.push(`> ${data.elevator_pitch}`);
+    lines.push(``);
+  }
+  if (data.is_safe && Array.isArray(data.summary)) {
+    lines.push(`## Summary`);
+    data.summary.forEach(b => lines.push(`- ${b}`));
+    lines.push(``);
+  } else if (data.summary) {
+    lines.push(`## Notes`);
+    lines.push(Array.isArray(data.summary) ? data.summary.join('\n') : data.summary);
+    lines.push(``);
+  }
+  if (data.tech_stack && data.tech_stack.length) {
+    lines.push(`## Tech Stack`);
+    data.tech_stack.forEach(t => lines.push(`- ${t}`));
+    lines.push(``);
+  }
+  if (data.social_links && data.social_links.length) {
+    lines.push(`## Social`);
+    data.social_links.forEach(s => lines.push(`- ${s}`));
+    lines.push(``);
+  }
+  if (data.outbound_links && data.outbound_links.length) {
+    lines.push(`## Outbound Links`);
+    data.outbound_links.forEach(l => lines.push(`- ${l}`));
+    lines.push(``);
+  }
+  return lines.join('\n');
+}
+
+function docResultToMarkdown(data) {
+  const lines = [];
+  lines.push(`# WireSavant Document Report — ${data.filename || 'document'}`);
+  lines.push(``);
+  lines.push(`*Generated ${new Date().toISOString()}*`);
+  lines.push(``);
+  const status = data.error ? 'Error' : data.is_safe ? 'Clean' : 'Threat';
+  lines.push(`- **Status:** ${status}${data.risk_level ? ` (${data.risk_level} risk)` : ''}`);
+  if (data.content_type && data.content_type !== 'other') lines.push(`- **Type:** ${data.content_type}`);
+  if (data.page_title) lines.push(`- **Title:** ${data.page_title}`);
+  if (data.file_meta) {
+    if (data.file_meta.pages) lines.push(`- **Pages:** ${data.file_meta.pages}`);
+    if (data.file_meta.slides) lines.push(`- **Slides:** ${data.file_meta.slides}`);
+    if (data.file_meta.paragraphs) lines.push(`- **Paragraphs:** ${data.file_meta.paragraphs}`);
+  }
+  lines.push(`- **Timing:** parse ${data.parse_time ?? 0}s · infer ${data.ai_time ?? 0}s`);
+  lines.push(``);
+  if (data.elevator_pitch && data.is_safe) {
+    lines.push(`> ${data.elevator_pitch}`);
+    lines.push(``);
+  }
+  if (data.is_safe && Array.isArray(data.summary)) {
+    lines.push(`## Summary`);
+    data.summary.forEach(b => lines.push(`- ${b}`));
+    lines.push(``);
+  } else if (data.summary) {
+    lines.push(`## Notes`);
+    lines.push(Array.isArray(data.summary) ? data.summary.join('\n') : data.summary);
+    lines.push(``);
+  }
+  return lines.join('\n');
+}
+
+// =============================================================================
+// HISTORY
+// =============================================================================
+function addToHistory(entry) {
+  const key = entry.kind + '::' + entry.url;
+  history = history.filter(h => (h.kind + '::' + h.url) !== key);
+  history.unshift({
+    kind: entry.kind,
+    url: entry.url,
+    is_safe: entry.data.is_safe,
+    error: entry.data.error,
+    risk_level: entry.data.risk_level || 'low',
+  });
+  if (history.length > 12) history = history.slice(0, 12);
+  saveHistoryToStorage();
+  renderHistory();
+}
+
+function setHistoryFilter(f) {
+  historyFilter = f;
+  document.querySelectorAll('.filter-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.filter === f);
+  });
+  renderHistory();
+}
+
+function renderHistory() {
+  const section = document.getElementById('historySection');
+  const list = document.getElementById('historyList');
+  const filtered = historyFilter === 'all' ? history : history.filter(h => h.kind === historyFilter);
+  if (!filtered.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  list.innerHTML = filtered.map((h, i) => {
+    const color = h.error ? 'var(--warn)' : h.is_safe ? 'var(--safe)' : 'var(--danger)';
+    const label = h.error ? 'Error' : h.is_safe ? 'Clean' : 'Threat';
+    const kindLabel = h.kind === 'doc' ? 'DOC' : 'URL';
+    // Store kind/url on data-* attributes and wire the click via event delegation,
+    // so URLs containing quotes / apostrophes / weird characters don't break inline onclick.
+    return `<div class="history-item" data-idx="${i}">
+      <div class="history-dot" style="background:${color}; box-shadow:0 0 6px ${color}"></div>
+      <div class="history-url">${escHtml(h.url)}</div>
+      <span class="history-kind">${kindLabel}</span>
+      <div class="history-tag">${label}</div>
+    </div>`;
+  }).join('');
+  // Event delegation — safer than inline onclick with arbitrary URL content
+  list.querySelectorAll('.history-item').forEach((el, i) => {
+    el.addEventListener('click', () => reloadHistory(filtered[i].kind, filtered[i].url));
+  });
+}
+
+function reloadHistory(kind, url) {
+  if (kind === 'doc') {
+    toast('Re-upload the file to re-scan');
+    switchTab('doc');
+  } else {
+    switchTab('single');
+    urlInput.value = url;
+    analyzeUrl();
+  }
+}
+
+function clearHistory() { history = []; saveHistoryToStorage(); renderHistory(); }
+
+// =============================================================================
+// PASTE-TO-SCAN — intercept paste on body, extract first URL
+// =============================================================================
+document.addEventListener('paste', e => {
+  // Don't intercept when user is typing in an input/textarea
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea') return;
+
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  const match = text && text.match(/https?:\/\/[^\s<>"']+/i);
+  if (match) {
+    e.preventDefault();
+    const url = match[0].replace(/[.,;:!?)]+$/, '');
+    switchTab('single');
+    urlInput.value = url;
+    toast('URL pasted — scanning');
+    setTimeout(analyzeUrl, 200);
+  }
+});
+
+// =============================================================================
+// KEYBOARD SHORTCUTS
+// =============================================================================
+document.addEventListener('keydown', e => {
+  const mod = e.metaKey || e.ctrlKey;
+
+  // Cmd/Ctrl + K → focus URL input (or file picker on doc tab)
+  if (mod && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    const docVisible = document.getElementById('docPane').classList.contains('active');
+    if (docVisible) fileInput.click();
+    else { switchTab('single'); urlInput.focus(); urlInput.select(); }
+  }
+
+  // Cmd/Ctrl + U → file picker
+  if (mod && e.key.toLowerCase() === 'u') {
+    e.preventDefault();
+    switchTab('doc');
+    fileInput.click();
+  }
+
+  // Enter in URL input
+  if (e.key === 'Enter' && document.activeElement === urlInput) {
+    analyzeUrl();
+  }
+
+  // Esc → reset active pane
+  if (e.key === 'Escape') {
+    const docVisible = document.getElementById('docPane').classList.contains('active');
+    const singleVisible = document.getElementById('singlePane').classList.contains('active');
+    if (docVisible && docResultDiv.style.display !== 'none') resetDocUI();
+    else if (singleVisible && resultDiv.style.display !== 'none') resetUI();
+    else urlInput.blur();
+  }
+});
+
+// Render any history restored from localStorage
+renderHistory();
+
+// Auto-load from ?url= query param
+const params = new URLSearchParams(window.location.search);
+if (params.get('url')) {
+  urlInput.value = params.get('url');
+  setTimeout(analyzeUrl, 300);
+}
+</script>
+</body>
+</html>
