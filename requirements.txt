@@ -1,5 +1,9 @@
-curl -H "X-API-Key: ask_83ec0afc882ac02137c7b40924892bd1859a371cdba0331dc5a4ca7ad3b55cd7" https://api.anakin.io/v1/wire/catalog/npm
-curl -H "X-API-Key: ask_83ec0afc882ac02137c7b40924892bd1859a371cdba0331dc5a4ca7ad3b55cd7" https://api.anakin.io/v1/wire/catalog/pypi
-curl -H "X-API-Key: ask_83ec0afc882ac02137c7b40924892bd1859a371cdba0331dc5a4ca7ad3b55cd7" https://api.anakin.io/v1/wire/catalog/reddit
-curl -H "X-API-Key: ask_83ec0afc882ac02137c7b40924892bd1859a371cdba0331dc5a4ca7ad3b55cd7" https://api.anakin.io/v1/wire/catalog/stackoverflow
-curl -H "X-API-Key: ask_83ec0afc882ac02137c7b40924892bd1859a371cdba0331dc5a4ca7ad3b55cd7" https://api.anakin.io/v1/wire/catalog/amazon
+fastapi
+uvicorn
+httpx
+groq
+python-dotenv
+python-multipart
+python-docx
+python-pptx
+pypdf
